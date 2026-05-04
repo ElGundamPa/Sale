@@ -1,0 +1,90 @@
+/**
+ * Centralised keyframes and animation utilities.
+ *
+ * Rules:
+ *   1. Animate only `transform` and `opacity` whenever possible.
+ *   2. No infinite animation should run when `prefers-reduced-motion: reduce`.
+ *   3. Keyframes live here; components apply them via class.
+ */
+
+/* ───── Keyframes ───── */
+
+@keyframes live-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.7); opacity: 0.6; }
+}
+
+@keyframes marquee-bulb {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@keyframes particle-rise {
+  0% { transform: translate3d(0, 0, 0); opacity: 0; }
+  10% { opacity: 0.4; }
+  90% { opacity: 0.4; }
+  100% { transform: translate3d(20px, -120vh, 0); opacity: 0; }
+}
+
+@keyframes shard-fall {
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate3d(0, 120vh, 0) rotate(720deg); opacity: 0.7; }
+}
+
+@keyframes firework-burst {
+  0%   { opacity: 0; height: 0; }
+  30%  { opacity: 1; height: 60px; }
+  100% { opacity: 0; height: 100px; }
+}
+
+@keyframes logo-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* ───── Utility classes ───── */
+
+.anim-live-pulse {
+  animation: live-pulse 1.6s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+.anim-marquee-bulb {
+  animation: marquee-bulb 1.2s ease-in-out infinite;
+  will-change: opacity;
+}
+.anim-particle {
+  animation: particle-rise linear infinite;
+  will-change: transform, opacity;
+}
+.anim-shard-fall {
+  animation: shard-fall linear forwards;
+  will-change: transform, opacity;
+}
+.anim-firework {
+  animation: firework-burst 1.4s ease-out forwards;
+  will-change: opacity, height;
+  transform-origin: top;
+}
+.anim-logo-float {
+  animation: logo-float 4s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* ───── Reduced motion ───── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .anim-live-pulse,
+  .anim-marquee-bulb,
+  .anim-particle,
+  .anim-firework,
+  .anim-logo-float {
+    animation: none !important;
+  }
+}
