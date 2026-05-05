@@ -6,26 +6,26 @@ interface TeamCardProps {
   team: Team;
 }
 
-const SEGMENT_COUNT = 14;
-
 function ProgressBar({ progress }: { progress: number }) {
-  const filled = Math.round(progress * SEGMENT_COUNT);
+  const pct = Math.max(0, Math.min(1, progress)) * 100;
   return (
-    <div className="flex items-center gap-1">
-      {Array.from({ length: SEGMENT_COUNT }).map((_, i) => {
-        const lit = i < filled;
-        return (
-          <span
-            key={i}
-            className={
-              "h-3 flex-1 rounded-sm border " +
-              (lit
-                ? "border-kriptex-orange-bright bg-gradient-to-b from-kriptex-orange-bright via-kriptex-orange to-kriptex-orange-deep shadow-[0_0_6px_rgba(255,138,42,0.55)]"
-                : "border-kriptex-cyan/20 bg-kriptex-steel/40")
-            }
-          />
-        );
-      })}
+    <div
+      className="relative h-3 w-full overflow-hidden rounded-full border border-kriptex-cyan/20 bg-kriptex-steel/40"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(pct)}
+    >
+      <div
+        className="h-full rounded-full bg-gradient-to-r from-kriptex-orange-bright via-kriptex-orange to-kriptex-orange-deep transition-[width] duration-500 ease-out"
+        style={{
+          width: `${pct}%`,
+          boxShadow:
+            pct > 0
+              ? "0 0 10px rgba(255, 138, 42, 0.55), inset 0 0 6px rgba(255, 255, 255, 0.25)"
+              : "none",
+        }}
+      />
     </div>
   );
 }
@@ -35,38 +35,59 @@ export function TeamCard({ team }: TeamCardProps) {
   const sortedAgents = [...team.agents].sort((a, b) => b.total - a.total);
 
   return (
-    <section className="kriptex-card relative overflow-hidden p-6">
-      <header className="mb-5 flex items-end justify-between gap-4 border-b border-kriptex-cyan/30 pb-4">
-        <div>
-          <p className="font-sans text-xs uppercase tracking-[0.5em] text-kriptex-cyan/70">
+    <section
+      className="kriptex-card relative flex flex-col overflow-hidden"
+      style={{ padding: "clamp(1rem, 2.5vw, 1.5rem)" }}
+    >
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-kriptex-cyan/30 pb-3">
+        <div className="min-w-0">
+          <p className="font-sans text-[10px] uppercase tracking-[0.4em] text-kriptex-cyan/70 sm:text-xs sm:tracking-[0.5em]">
             Trading desk
           </p>
-          <h2 className="font-display text-3xl text-orange-glow">{team.name}</h2>
+          <h2
+            className="truncate font-display text-orange-glow"
+            style={{ fontSize: "clamp(1.4rem, 3.4vw, 2rem)" }}
+          >
+            {team.name}
+          </h2>
         </div>
-        <div className="text-right">
-          <p className="font-sans text-xs uppercase tracking-[0.4em] text-kriptex-cream/60">
+        <div className="ml-auto text-right">
+          <p className="font-sans text-[10px] uppercase tracking-[0.3em] text-kriptex-cream/60 sm:text-xs sm:tracking-[0.4em]">
             Volume
           </p>
-          <p className="font-digital text-3xl text-cyan-glow">
+          <p
+            className="font-digital text-cyan-glow"
+            style={{ fontSize: "clamp(1.25rem, 3vw, 1.875rem)" }}
+          >
             {formatCurrency(team.total)}
           </p>
-          <p className="font-sans text-xs text-kriptex-cream/50">
+          <p className="font-sans text-[11px] text-kriptex-cream/50">
             target {formatCurrency(team.goal)}
           </p>
         </div>
       </header>
 
-      <div className="mb-6">
+      <div className="mb-5">
         <ProgressBar progress={progress} />
-        <p className="mt-2 font-sans text-sm tracking-wider text-kriptex-cream/70">
-          {Math.round(progress * 100)}% to desk target
+        <p className="mt-2 font-sans text-xs tracking-wider text-kriptex-cream/70 sm:text-sm">
+          {Math.round(progress * 100)}% to desk target ·{" "}
+          {sortedAgents.length} agente
+          {sortedAgents.length === 1 ? "" : "s"}
         </p>
       </div>
 
-      <ul className="space-y-2">
+      {/* Agent list grows with content; the dashboard's <main> handles scroll.
+          To opt into per-card internal scroll, wrap the <ul> in a div with
+          `max-h-[60vh] overflow-y-auto` and add `scrollbar-thin`. */}
+      <ul className="flex flex-col gap-2">
         {sortedAgents.map((agent, i) => (
           <AgentRow key={agent.id} agent={agent} rank={i + 1} />
         ))}
+        {sortedAgents.length === 0 && (
+          <li className="rounded-md border border-dashed border-kriptex-cyan/30 px-4 py-6 text-center text-sm text-kriptex-cream/50">
+            Sin agentes en esta mesa.
+          </li>
+        )}
       </ul>
     </section>
   );

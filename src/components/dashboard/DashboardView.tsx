@@ -21,51 +21,57 @@ export function DashboardView({ teams }: DashboardViewProps) {
   );
 
   return (
-    <div className="flex h-full w-full flex-col px-8 py-6">
-      <header className="flex items-center justify-between gap-6 border-b border-kriptex-cyan/30 pb-6">
-        <div className="flex items-center gap-4">
-          <BrandMark size={56} />
-          <div>
-            <p className="font-sans text-xs uppercase tracking-[0.4em] text-kriptex-cyan/70">
+    <div className="flex h-full w-full flex-col">
+      <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b border-kriptex-cyan/30 px-4 pb-4 pt-4 sm:px-6 sm:pb-5 lg:px-8">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <BrandMark size={48} />
+          <div className="min-w-0">
+            <p className="font-sans text-[10px] uppercase tracking-[0.4em] text-kriptex-cyan/70 sm:text-xs">
               Sales Floor
             </p>
-            <h1 className="font-display text-4xl leading-none text-orange-glow">
+            <h1
+              className="truncate font-display leading-none text-orange-glow"
+              style={{ fontSize: "clamp(1.5rem, 4vw, 2.5rem)" }}
+            >
               {BRAND.name.toUpperCase()}
             </h1>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="order-3 flex w-full items-center justify-center gap-2 sm:order-none sm:w-auto">
           <span
-            className="anim-live-pulse h-3 w-3 rounded-full"
+            className="anim-live-pulse h-2.5 w-2.5 rounded-full"
             style={{
               background: "var(--color-danger)",
               boxShadow:
-                "0 0 12px var(--color-danger), 0 0 24px var(--color-danger)",
+                "0 0 10px var(--color-danger), 0 0 20px var(--color-danger)",
             }}
           />
-          <NeonText color="danger" className="text-3xl">
+          <NeonText color="danger" className="text-2xl sm:text-3xl">
             LIVE
           </NeonText>
         </div>
 
         <div className="text-right">
-          <p className="font-sans text-xs uppercase tracking-[0.4em] text-kriptex-cream/60">
+          <p className="font-sans text-[10px] uppercase tracking-[0.4em] text-kriptex-cream/60 sm:text-xs">
             Total Volume
           </p>
-          <p className="font-digital text-5xl text-cyan-glow">
+          <p
+            className="font-digital text-cyan-glow"
+            style={{ fontSize: "clamp(1.75rem, 5vw, 3rem)" }}
+          >
             {formatCurrency(houseTotal)}
           </p>
-          <p className="font-sans text-xs text-kriptex-cream/50">
+          <p className="font-sans text-[11px] text-kriptex-cream/50 sm:text-xs">
             target {formatCurrency(houseGoal)}
           </p>
         </div>
       </header>
 
-      <main className="grid flex-1 grid-cols-1 gap-6 overflow-auto py-6 lg:grid-cols-2 xl:grid-cols-2">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
         {teams.length === 0 ? (
-          <div className="col-span-full flex h-full items-center justify-center">
-            <p className="font-sans text-xl text-kriptex-cream/60">
+          <div className="flex h-full items-center justify-center">
+            <p className="text-center font-sans text-base text-kriptex-cream/60 sm:text-lg">
               No hay mesas configuradas. Andá a{" "}
               <a
                 href="/admin"
@@ -77,7 +83,17 @@ export function DashboardView({ teams }: DashboardViewProps) {
             </p>
           </div>
         ) : (
-          teams.map((team) => <TeamCard key={team.id} team={team} />)
+          <div
+            className="grid gap-4 sm:gap-5 lg:gap-6"
+            style={{
+              gridTemplateColumns:
+                "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
+            }}
+          >
+            {teams.map((team) => (
+              <TeamCard key={team.id} team={team} />
+            ))}
+          </div>
         )}
       </main>
     </div>
