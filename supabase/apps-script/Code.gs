@@ -2,16 +2,31 @@
  * Vegas Sales — doGet
  * Devuelve { teams, newSales } para el Edge Function google-sheets-proxy.
  *
- * Hoja "Total":
- *   Mesa 1 → filas 3-8,  total real en J3
- *   Mesa 2 → filas 11-17, total real en J4
- *   Col B = nombre agente, Col E = total acumulado del agente
+ * Workbook: "Formulario retencion animacion (Responses)"
+ * Deployment ID actual (web app):
+ *   AKfycbwKIRfdy1PMUcXdzKhvV5GFb1N3hcwnZPs1KMXGnKY-jfGkM74EL-u1yiwAdEljxJYR
  *
- * Hoja "Hoja 2":
- *   Col C = agente que cerró
- *   Col K = fecha de entrada (la fila se considera venta cerrada cuando K tiene valor)
- *   Col L = monto
+ * FUENTES DE DATOS:
+ *
+ * Hoja "Base_Agregada" — FUENTE OFICIAL DEL MONTO QUE ANIMA EL JACKPOT.
+ *   A = Agente, B = Fecha, C = Monto, D = semana,
+ *   E = equipo, F = fecha limpia, G = equipo limpio.
+ *   Cada fila = una venta. La animación dispara con el `Monto` de esta hoja.
+ *
+ * Hoja "Tabla" (solo totales acumulados que se muestran en la pizarra):
+ *   A2:A16 → nombre de agente (15 agentes, fila 17 es "total")
+ *   B = dia, C = semana, D = mes (por agente)
+ *   H5:H8 → nombre de equipo (Elite Digital, Gamer, Zenit Inverts, Innova)
+ *   I = dia, J = semana, K = mes (por equipo)
+ *
+ * Hoja "Equipos" (mapeo agente → equipo):
+ *   A = agente, B = equipo (rangos A1:B15)
+ *
+ * El "total acumulado" mostrado al lado de cada agente usa "Tabla" col D (mes).
+ * El monto que dispara la animación usa "Base_Agregada" col C (Monto).
  */
+
+var TEAM_GOAL = 50000;
 
 function doGet() {
   try {
@@ -20,16 +35,33 @@ function doGet() {
       return jsonResponse({ error: "Script no vinculado a un Sheet" });
     }
 
-    var sheetTotal = ss.getSheetByName("Total");
-    var sheet2 = ss.getSheetByName("Hoja 2");
-    if (!sheetTotal) return jsonResponse({ error: "Falta hoja 'Total'" });
-    if (!sheet2) return jsonResponse({ error: "Falta hoja 'Hoja 2'" });
+    console.log(
+      "Cargando sheet Base_Agregada de Formulario retencion animacion (Responses)"
+    );
 
-    var dataTotal = sheetTotal.getDataRange().getValues();
-    var data2 = sheet2.getDataRange().getValues();
+    var sheetTabla = ss.getSheetByName("Tabla");
+    var sheetEquipos = ss.getSheetByName("Equipos");
+    var sheetBase = ss.getSheetByName("Base_Agregada");
+    var sheetForm = ss.getSheetByName("Form Responses 1"); // opcional, solo para timestamps
 
-    var teams = processTeamsData(dataTotal);
-    var newSales = processNewSales(data2);
+    if (!sheetTabla) return jsonResponse({ error: "Falta hoja 'Tabla'" });
+    if (!sheetEquipos) return jsonResponse({ error: "Falta hoja 'Equipos'" });
+    if (!sheetBase) return jsonResponse({ error: "Falta hoja 'Base_Agregada'" });
+
+    var dataTabla = sheetTabla.getDataRange().getValues();
+    var dataEquipos = sheetEquipos.getDataRange().getValues();
+    var dataBase = sheetBase.getDataRange().getValues();
+    var dataForm = sheetForm ? sheetForm.getDataRange().getValues() : [];
+
+    var teams = processTeamsData(dataTabla, dataEquipos);
+    var newSales = processNewSalesFromBaseAgregada(dataBase, dataForm);
+
+    console.log(
+      "Base_Agregada filas leídas:",
+      dataBase.length,
+      "→ ventas válidas:",
+      newSales.length
+    );
 
     return jsonResponse({ teams: teams, newSales: newSales });
   } catch (e) {
@@ -43,90 +75,204 @@ function jsonResponse(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function processTeamsData(data) {
-  // Loop usa `i < endRow` con i = startRow-1 (0-indexed).
-  // endRow es EXCLUSIVO: la última fila leída es endRow-1 (1-indexed: endRow).
-  // Mesa 1 → filas 3-9 (7 agentes), endRow = 9 → loop i=2..8 → rows 3..9 ✓
-  // Mesa 2 → filas 11-17 (7 agentes), endRow = 17 → loop i=10..16 → rows 11..17 ✓
-  // Si agregás/quitás filas en la pizarra, ajustá startRow/endRow.
-  var teamRanges = [
-    { name: "Mesa 1", startRow: 3,  endRow: 9,  totalCell: { row: 2, col: 9 } },
-    { name: "Mesa 2", startRow: 11, endRow: 17, totalCell: { row: 3, col: 9 } }
-  ];
-
+function processTeamsData(dataTabla, dataEquipos) {
   // Defensa contra filas de subtotal/encabezado capturadas por error.
-  var EXCLUDED_NAMES = ["total", "subtotal", "totales", "agentes", "agente", "nombre"];
+  var EXCLUDED_NAMES = ["total", "subtotal", "totales", "agentes", "agente", "nombre", "equipos", "equipo"];
 
+  // 1) Mapeo agente → equipo desde la hoja "Equipos" (A:B, sin encabezado).
+  var agentToTeam = {};
+  for (var i = 0; i < dataEquipos.length; i++) {
+    var agent = dataEquipos[i][0];
+    var teamName = dataEquipos[i][1];
+    var nameStr = agent ? agent.toString().trim() : '';
+    var teamStr = teamName ? teamName.toString().trim() : '';
+    if (nameStr === '' || teamStr === '') continue;
+    if (EXCLUDED_NAMES.indexOf(nameStr.toLowerCase()) !== -1) continue;
+    agentToTeam[nameStr] = teamStr;
+  }
+
+  // 2) Totales por equipo desde "Tabla" H5:K8 (col H=nombre, col K=mes).
+  //    H4 es encabezado "Equipos"; los datos arrancan en fila 5 (índice 4).
+  var teamTotals = {};
+  var teamOrder = [];
+  for (var r = 4; r < dataTabla.length; r++) {
+    var row = dataTabla[r];
+    var tName = row[7]; // Col H
+    var tMes = parseFloat(row[10]) || 0; // Col K (mes)
+    var tStr = tName ? tName.toString().trim() : '';
+    if (tStr === '') continue;
+    if (EXCLUDED_NAMES.indexOf(tStr.toLowerCase()) !== -1) continue;
+    teamTotals[tStr] = tMes;
+    teamOrder.push(tStr);
+  }
+
+  // 3) Totales por agente desde "Tabla" A2:D16 (col A=nombre, col D=mes).
+  //    Fila 17 es "total" y queda fuera por EXCLUDED_NAMES.
+  var teamsMap = {};
+  for (var j = 1; j < dataTabla.length; j++) {
+    var rowA = dataTabla[j];
+    var agentName = rowA[0]; // Col A
+    var agentMes = parseFloat(rowA[3]) || 0; // Col D (mes)
+    var aStr = agentName ? agentName.toString().trim() : '';
+    if (aStr === '') continue;
+    if (EXCLUDED_NAMES.indexOf(aStr.toLowerCase()) !== -1) continue;
+
+    var team = agentToTeam[aStr];
+    if (!team) continue; // agente sin equipo asignado → se omite.
+
+    if (!teamsMap[team]) {
+      teamsMap[team] = {
+        id: team.toLowerCase().replace(/\s+/g, '-'),
+        name: team,
+        goal: TEAM_GOAL,
+        total_real: teamTotals[team] || 0,
+        agents: []
+      };
+    }
+
+    teamsMap[team].agents.push({
+      id: aStr.toLowerCase().replace(/\s+/g, '-') + '-' + j,
+      name: aStr,
+      avatar:
+        "https://api.dicebear.com/7.x/avataaars/svg?seed=" +
+        encodeURIComponent(aStr),
+      sales: agentMes,
+      teamId: team.toLowerCase().replace(/\s+/g, '-')
+    });
+  }
+
+  // 4) Devolver equipos en el orden en que aparecen en la pizarra (H5:H8).
   var teams = [];
-
-  for (var t = 0; t < teamRanges.length; t++) {
-    var teamConfig = teamRanges[t];
-    var team = {
-      id: teamConfig.name.toLowerCase().replace(/\s+/g, '-'),
-      name: teamConfig.name,
-      goal: 50000,
-      total_real: 0,
-      agents: []
-    };
-
-    if (
-      data[teamConfig.totalCell.row] &&
-      data[teamConfig.totalCell.row][teamConfig.totalCell.col] !== undefined
-    ) {
-      team.total_real =
-        parseFloat(data[teamConfig.totalCell.row][teamConfig.totalCell.col]) || 0;
+  for (var k = 0; k < teamOrder.length; k++) {
+    var tn = teamOrder[k];
+    if (teamsMap[tn] && teamsMap[tn].agents.length > 0) {
+      teams.push(teamsMap[tn]);
     }
-
-    for (
-      var i = teamConfig.startRow - 1;
-      i < teamConfig.endRow && i < data.length;
-      i++
-    ) {
-      var row = data[i];
-      var agentName = row[1]; // Col B
-      var sales = parseFloat(row[4]) || 0; // Col E
-
-      var nameStr = agentName ? agentName.toString().trim() : '';
-      if (nameStr !== '' && EXCLUDED_NAMES.indexOf(nameStr.toLowerCase()) === -1) {
-        team.agents.push({
-          id: agentName.toString().toLowerCase().replace(/\s+/g, '-') + '-' + i,
-          name: agentName.toString().trim(),
-          avatar:
-            "https://api.dicebear.com/7.x/avataaars/svg?seed=" +
-            encodeURIComponent(agentName),
-          sales: sales,
-          teamId: team.id
-        });
-      }
-    }
-
-    if (team.agents.length > 0) {
-      teams.push(team);
+  }
+  // Por si quedó algún equipo sin total en la pizarra pero con agentes asignados.
+  for (var key in teamsMap) {
+    if (teamOrder.indexOf(key) === -1 && teamsMap[key].agents.length > 0) {
+      teams.push(teamsMap[key]);
     }
   }
 
   return teams;
 }
 
-function processNewSales(data) {
+/**
+ * FUENTE OFICIAL del monto que anima el jackpot.
+ * Lee la hoja "Base_Agregada":
+ *   col A = Agente, col B = Fecha, col C = Monto.
+ * Cruza con "Form Responses 1" (col A = Timestamp de envío del formulario,
+ * col B = Fecha de deposito, col C = Agente) para sacar `submittedAt`.
+ *
+ * `submittedAt` permite distinguir ventas FRESCAS (recién enviadas) de
+ * históricas, así la animación dispara aunque el dashboard se abra después.
+ */
+function processNewSalesFromBaseAgregada(data, dataForm) {
+  // 1) Lookup (agente|fecha) → último Timestamp de Form Responses 1.
+  var tsMap = {};
+  for (var f = 1; f < (dataForm || []).length; f++) {
+    var fr = dataForm[f];
+    var ts = fr[0];        // col A: Timestamp
+    var fechaDep = fr[1];  // col B: Fecha de deposito
+    var agt = fr[2];       // col C: Agente
+    if (!ts || !agt) continue;
+    var agtStr = agt.toString().trim();
+    if (!agtStr) continue;
+    var key = agtStr.toLowerCase() + '|' + dateKey(fechaDep);
+    var tsMs = ts instanceof Date ? ts.getTime() : Date.parse(ts.toString());
+    if (isNaN(tsMs)) continue;
+    if (!tsMap[key] || tsMs > tsMap[key]) tsMap[key] = tsMs;
+  }
+
+  // 2) Recorrer Base_Agregada y armar newSales.
   var sales = [];
-
-  for (var i = 1; i < data.length; i++) {
+  for (var i = 0; i < data.length; i++) {
     var row = data[i];
-    var agentName = row[2];               // Col C
-    var entryDate = row[10];              // Col K
-    var value = parseFloat(row[11]) || 0; // Col L
+    var agentName = row[0]; // Col A: Agente
+    var entryDate = row[1]; // Col B: Fecha
+    var rawMonto = row[2];  // Col C: Monto
 
-    if (agentName && entryDate && value > 0) {
-      sales.push({
-        agentName: agentName.toString().trim(),
-        entryDate: entryDate.toString(),
-        value: value
-      });
-    }
+    if (agentName == null) continue;
+
+    var nameStr = agentName.toString().trim();
+    if (!nameStr) continue;
+
+    var lower = nameStr.toLowerCase();
+    if (lower === "agente" || lower === "fecha" || lower === "monto") continue;
+
+    var monto = toNumber(rawMonto);
+    if (!(monto > 0)) continue;
+    if (entryDate === undefined || entryDate === null || entryDate === "") continue;
+
+    var entryDateStr =
+      entryDate instanceof Date ? entryDate.toISOString() : entryDate.toString();
+
+    var key2 = nameStr.toLowerCase() + '|' + dateKey(entryDate);
+    var submittedAt = tsMap[key2]
+      ? new Date(tsMap[key2]).toISOString()
+      : null;
+
+    console.log("Base_Agregada row", i, "→", JSON.stringify({
+      agente: nameStr,
+      monto: monto,
+      submittedAt: submittedAt
+    }));
+
+    sales.push({
+      agentName: nameStr,
+      entryDate: entryDateStr,
+      value: monto,
+      submittedAt: submittedAt
+    });
   }
 
   return sales;
+}
+
+/**
+ * Normaliza una fecha (Date o string) a clave "YYYY-MM-DD" para joins.
+ */
+function dateKey(v) {
+  if (!v) return '';
+  if (v instanceof Date) {
+    var y = v.getFullYear();
+    var m = ('0' + (v.getMonth() + 1)).slice(-2);
+    var d = ('0' + v.getDate()).slice(-2);
+    return y + '-' + m + '-' + d;
+  }
+  var s = v.toString();
+  var parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    var y2 = parsed.getFullYear();
+    var m2 = ('0' + (parsed.getMonth() + 1)).slice(-2);
+    var d2 = ('0' + parsed.getDate()).slice(-2);
+    return y2 + '-' + m2 + '-' + d2;
+  }
+  return s;
+}
+
+/**
+ * Convierte cualquier representación de número en un Number.
+ * - Si ya es number, lo devuelve.
+ * - Si es string con coma decimal o separador de miles, lo limpia.
+ */
+function toNumber(v) {
+  if (typeof v === "number") return v;
+  if (v == null) return 0;
+  var s = v.toString().trim();
+  if (!s) return 0;
+  // Si tiene coma y punto, asumir formato US (1,234.56) y quitar comas.
+  // Si solo tiene coma, asumir europeo (1234,56) y convertir coma a punto.
+  if (s.indexOf(",") !== -1 && s.indexOf(".") !== -1) {
+    s = s.replace(/,/g, "");
+  } else if (s.indexOf(",") !== -1 && s.indexOf(".") === -1) {
+    s = s.replace(/,/g, ".");
+  }
+  s = s.replace(/[^\d.\-]/g, "");
+  var n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
 }
 
 /**
@@ -146,10 +292,11 @@ function test() {
   var sheetNames = ss.getSheets().map(function(s) { return s.getName(); });
   console.log("Hojas existentes:", JSON.stringify(sheetNames));
 
-  console.log("Hoja 'Total':", ss.getSheetByName("Total") ? "OK" : "NO ENCONTRADA");
-  console.log("Hoja 'Hoja 2':", ss.getSheetByName("Hoja 2") ? "OK" : "NO ENCONTRADA");
+  console.log("Hoja 'Tabla':", ss.getSheetByName("Tabla") ? "OK" : "NO ENCONTRADA");
+  console.log("Hoja 'Equipos':", ss.getSheetByName("Equipos") ? "OK" : "NO ENCONTRADA");
+  console.log("Hoja 'Base_Agregada':", ss.getSheetByName("Base_Agregada") ? "OK" : "NO ENCONTRADA");
 
   // Ejecutar el doGet completo y mostrar resultado.
   var result = doGet();
-  console.log("doGet output:", result.getContent().substring(0, 800));
+  console.log("doGet output:", result.getContent().substring(0, 1500));
 }

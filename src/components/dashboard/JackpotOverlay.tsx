@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { JackpotEvent } from "@/types";
 import { useAudioPlayer } from "@/hooks/useAudioPlayer";
+import { useJackpotSfx } from "@/hooks/useJackpotSfx";
+import { logger } from "@/lib/logger";
 import { formatCurrency } from "@/lib/utils";
 import {
   JACKPOT_AUDIO_FADE_MS,
@@ -245,13 +247,30 @@ function CountUp({
 
 export function JackpotOverlay({ event, onComplete }: JackpotOverlayProps) {
   const { play, stop } = useAudioPlayer();
+  const sfx = useJackpotSfx();
   const [phase, setPhase] = useState<
     "flash" | "reels" | "reveal" | "curtain" | "done"
   >("flash");
 
   useEffect(() => {
     if (!event) return;
+    logger.info("jackpot starting", {
+      agent: event.agent.name,
+      amount: event.amount,
+      hasSong: !!event.agent.songUrl,
+    });
     setPhase("flash");
+
+    // SFX sintetizados — se disparan siempre, exista o no songUrl.
+    sfx.flash();
+    const sfxReels = window.setTimeout(() => sfx.reels(), JACKPOT_FLASH_MS);
+    const sfxWin = window.setTimeout(
+      () => {
+        sfx.win();
+        sfx.coins();
+      },
+      JACKPOT_FLASH_MS + JACKPOT_REEL_SPIN_MS + 600,
+    );
 
     const t1 = window.setTimeout(() => setPhase("reels"), JACKPOT_FLASH_MS);
     const t2 = window.setTimeout(
@@ -267,6 +286,17 @@ export function JackpotOverlay({ event, onComplete }: JackpotOverlayProps) {
       onComplete();
     }, JACKPOT_DURATION_MS);
 
+    const cleanup = () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+      window.clearTimeout(t4);
+      window.clearTimeout(sfxReels);
+      window.clearTimeout(sfxWin);
+      sfx.stop();
+      stop();
+    };
+
     if (event.agent.songUrl) {
       const audioStart = window.setTimeout(() => {
         play({
@@ -277,22 +307,12 @@ export function JackpotOverlay({ event, onComplete }: JackpotOverlayProps) {
         });
       }, JACKPOT_FLASH_MS);
       return () => {
-        window.clearTimeout(t1);
-        window.clearTimeout(t2);
-        window.clearTimeout(t3);
-        window.clearTimeout(t4);
         window.clearTimeout(audioStart);
-        stop();
+        cleanup();
       };
     }
 
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-      window.clearTimeout(t3);
-      window.clearTimeout(t4);
-      stop();
-    };
+    return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event?.triggeredAt]);
 

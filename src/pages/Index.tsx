@@ -8,9 +8,22 @@ import { useAppSettings } from "@/hooks/useAppSettings";
 import { useGoogleSheetData } from "@/hooks/useGoogleSheetData";
 import { buildTeams } from "@/lib/buildTeams";
 import { mockTeams } from "@/config/mockData";
-import type { JackpotEvent, Sale, Team } from "@/types";
+import { logger } from "@/lib/logger";
+import type { Agent, JackpotEvent, Sale, Team } from "@/types";
 
-const norm = (s: string) => s.trim().toLowerCase();
+const norm = (s: string) =>
+  s.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+const synthAgentFromSale = (sale: Sale): Agent => ({
+  id: `synth-${norm(sale.agentName)}`,
+  name: sale.agentName,
+  photoUrl: null,
+  songUrl: null,
+  songStartSeconds: 0,
+  teamId: "",
+  displayOrder: 0,
+  total: sale.value,
+});
 
 export default function Index() {
   const [entered, setEntered] = useState(false);
@@ -24,14 +37,30 @@ export default function Index() {
     pollingIntervalSeconds: settings.polling_interval_seconds,
     enabled: entered,
     onNewSale: (sale: Sale) => {
+      // sale.value viene de Base_Agregada!C (columna Monto).
+      logger.info("Base_Agregada → animación", {
+        agente: sale.agentName,
+        monto: sale.value,
+        entryDate: sale.entryDate,
+      });
       const liveAgents = teamRows.length
         ? buildTeams(agents, teamRows, null).flatMap((t) => t.agents)
         : mockTeams.flatMap((t) => t.agents);
       const match = liveAgents.find((a) => norm(a.name) === norm(sale.agentName));
-      if (!match) return;
+      const agentForJackpot: Agent = match ?? synthAgentFromSale(sale);
+      if (!match) {
+        logger.warn(
+          "Sale agent not found in Supabase agents — using synthetic agent for animation",
+          { sheetAgent: sale.agentName, supaAgents: liveAgents.map((a) => a.name) },
+        );
+      }
+      logger.info("disparando jackpot", {
+        agente: agentForJackpot.name,
+        monto: sale.value,
+      });
       setQueue((q) => [
         ...q,
-        { agent: match, amount: sale.value, triggeredAt: Date.now() },
+        { agent: agentForJackpot, amount: sale.value, triggeredAt: Date.now() },
       ]);
     },
   });
