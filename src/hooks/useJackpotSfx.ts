@@ -17,7 +17,20 @@ export function useJackpotSfx() {
   const masterRef = useRef<GainNode | null>(null);
   const activeNodes = useRef<Set<AudioScheduledSourceNode>>(new Set());
 
+  const prefersReducedMotion = () => {
+    try {
+      return (
+        typeof window !== "undefined" &&
+        window.matchMedia &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      );
+    } catch {
+      return false;
+    }
+  };
+
   const ensureCtx = () => {
+    if (prefersReducedMotion()) return null;
     if (!ctxRef.current) {
       try {
         const Ctx =

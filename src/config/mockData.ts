@@ -37,7 +37,13 @@ export const mockTeams: Team[] = [
       { id: "b5", name: "Antonia Rivas", photoUrl: portrait("antonia"), songUrl: MOCK_SONG, songStartSeconds: 18, teamId: "mesa-2", displayOrder: 4, total: 2_900 },
     ],
   },
-].map((team) => ({
-  ...team,
-  total: team.agents.reduce((sum, a) => sum + a.total, 0),
-}));
+].map((team) => {
+  const total = team.agents.reduce((sum, a) => sum + a.total, 0);
+  return {
+    ...team,
+    total,
+    dia: null,
+    semana: null,
+    mes: total,
+  };
+});

@@ -86,12 +86,16 @@ export default function Index() {
         <DashboardView teams={liveTeams} />
       )}
 
-      <JackpotOverlay event={current} onComplete={() => setCurrent(null)} />
+      <JackpotOverlay
+        event={current}
+        onComplete={() => setCurrent(null)}
+        durationMs={settings.jackpot_duration_seconds * 1000}
+      />
 
       {entered && (agentsError || sheet.error) && (
         <div className="fixed bottom-4 left-4 z-40 max-w-sm rounded-md border border-kriptex-danger bg-black/80 px-4 py-2 text-xs text-kriptex-danger">
-          {agentsError && <div>DB: {agentsError}</div>}
-          {sheet.error && <div>Sheet: {sheet.error}</div>}
+          {agentsError && <div>DB: error de conexión</div>}
+          {sheet.error && <div>Sheet: error de sincronización</div>}
         </div>
       )}
     </div>

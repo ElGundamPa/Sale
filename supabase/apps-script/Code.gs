@@ -91,18 +91,20 @@ function processTeamsData(dataTabla, dataEquipos) {
     agentToTeam[nameStr] = teamStr;
   }
 
-  // 2) Totales por equipo desde "Tabla" H5:K8 (col H=nombre, col K=mes).
+  // 2) Totales por equipo desde "Tabla" H5:K8 (col H=nombre, I=dia, J=semana, K=mes).
   //    H4 es encabezado "Equipos"; los datos arrancan en fila 5 (índice 4).
   var teamTotals = {};
   var teamOrder = [];
   for (var r = 4; r < dataTabla.length; r++) {
     var row = dataTabla[r];
     var tName = row[7]; // Col H
-    var tMes = parseFloat(row[10]) || 0; // Col K (mes)
+    var tDia = parseFloat(row[8]) || 0;    // Col I (dia)
+    var tSemana = parseFloat(row[9]) || 0; // Col J (semana)
+    var tMes = parseFloat(row[10]) || 0;   // Col K (mes)
     var tStr = tName ? tName.toString().trim() : '';
     if (tStr === '') continue;
     if (EXCLUDED_NAMES.indexOf(tStr.toLowerCase()) !== -1) continue;
-    teamTotals[tStr] = tMes;
+    teamTotals[tStr] = { dia: tDia, semana: tSemana, mes: tMes };
     teamOrder.push(tStr);
   }
 
@@ -121,11 +123,15 @@ function processTeamsData(dataTabla, dataEquipos) {
     if (!team) continue; // agente sin equipo asignado → se omite.
 
     if (!teamsMap[team]) {
+      var tt = teamTotals[team] || { dia: 0, semana: 0, mes: 0 };
       teamsMap[team] = {
         id: team.toLowerCase().replace(/\s+/g, '-'),
         name: team,
         goal: TEAM_GOAL,
-        total_real: teamTotals[team] || 0,
+        total_real: tt.mes,
+        dia: tt.dia,
+        semana: tt.semana,
+        mes: tt.mes,
         agents: []
       };
     }
@@ -214,11 +220,15 @@ function processNewSalesFromBaseAgregada(data, dataForm) {
       ? new Date(tsMap[key2]).toISOString()
       : null;
 
-    console.log("Base_Agregada row", i, "→", JSON.stringify({
-      agente: nameStr,
-      monto: monto,
-      submittedAt: submittedAt
-    }));
+    // Solo loguear las primeras 5 filas para no saturar Stackdriver con
+    // sheets grandes. El total se loguea al final en doGet().
+    if (sales.length < 5) {
+      console.log("[VegasGS] Base_Agregada row", i, "→", JSON.stringify({
+        agente: nameStr,
+        monto: monto,
+        submittedAt: submittedAt
+      }));
+    }
 
     sales.push({
       agentName: nameStr,

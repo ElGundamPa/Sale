@@ -15,6 +15,8 @@ import {
 interface JackpotOverlayProps {
   event: JackpotEvent | null;
   onComplete: () => void;
+  /** Duración total de la animación en ms. Si se omite, usa el default del config. */
+  durationMs?: number;
 }
 
 const REEL_FACES = ["⚡", "◆", "▲", "✦", "◯", "❖", "K", "⬢", "◈", "⬣", "✧"];
@@ -245,9 +247,14 @@ function CountUp({
   return <span>+{formatCurrency(display)}</span>;
 }
 
-export function JackpotOverlay({ event, onComplete }: JackpotOverlayProps) {
+export function JackpotOverlay({
+  event,
+  onComplete,
+  durationMs,
+}: JackpotOverlayProps) {
   const { play, stop } = useAudioPlayer();
   const sfx = useJackpotSfx();
+  const totalMs = durationMs ?? JACKPOT_DURATION_MS;
   const [phase, setPhase] = useState<
     "flash" | "reels" | "reveal" | "curtain" | "done"
   >("flash");
@@ -258,6 +265,7 @@ export function JackpotOverlay({ event, onComplete }: JackpotOverlayProps) {
       agent: event.agent.name,
       amount: event.amount,
       hasSong: !!event.agent.songUrl,
+      totalMs,
     });
     setPhase("flash");
 
@@ -279,12 +287,12 @@ export function JackpotOverlay({ event, onComplete }: JackpotOverlayProps) {
     );
     const t3 = window.setTimeout(
       () => setPhase("curtain"),
-      JACKPOT_DURATION_MS - 500,
+      totalMs - 500,
     );
     const t4 = window.setTimeout(() => {
       setPhase("done");
       onComplete();
-    }, JACKPOT_DURATION_MS);
+    }, totalMs);
 
     const cleanup = () => {
       window.clearTimeout(t1);
@@ -303,7 +311,7 @@ export function JackpotOverlay({ event, onComplete }: JackpotOverlayProps) {
           url: event.agent.songUrl as string,
           startSeconds: event.agent.songStartSeconds,
           fadeOutMs: JACKPOT_AUDIO_FADE_MS,
-          totalDurationMs: JACKPOT_DURATION_MS - JACKPOT_FLASH_MS,
+          totalDurationMs: totalMs - JACKPOT_FLASH_MS,
         });
       }, JACKPOT_FLASH_MS);
       return () => {

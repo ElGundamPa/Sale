@@ -1,0 +1,9 @@
+# Supabase project configuration.
+# Ver: https://supabase.com/docs/reference/cli/config
+
+project_id = "wocdusuclxffrwudwfwb"
+
+[functions.google-sheets-proxy]
+# Endpoint público — lo llama el dashboard sin sesión (también desde incógnito).
+# Sin esto, el gateway exige JWT y devuelve UNAUTHORIZED_INVALID_JWT_FORMAT.
+verify_jwt = false

@@ -16,6 +16,12 @@ export interface Team {
   iconUrl: string | null;
   displayOrder: number;
   total: number;
+  /** Total del día desde "Tabla" col I. `null` si el sheet no lo trae. */
+  dia: number | null;
+  /** Total de la semana desde "Tabla" col J. */
+  semana: number | null;
+  /** Total del mes desde "Tabla" col K. */
+  mes: number | null;
   agents: Agent[];
 }
 

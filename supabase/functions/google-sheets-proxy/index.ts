@@ -23,7 +23,7 @@ const corsHeaders = (requestOrigin: string | null) => ({
   "Access-Control-Allow-Origin": corsOrigin(requestOrigin),
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 });
 
 Deno.serve(async (req) => {
@@ -53,8 +53,49 @@ Deno.serve(async (req) => {
       throw new Error(`Apps Script responded ${upstream.status}`);
     }
     const text = await upstream.text();
-    // Validate JSON.
-    JSON.parse(text);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error("Apps Script returned non-JSON");
+    }
+
+    // Apps Script puede devolver { error: "..." } con status 200 cuando algo
+    // falla en el script — propagar como 502 para que el front no cachee basura.
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "error" in parsed &&
+      typeof (parsed as { error: unknown }).error === "string"
+    ) {
+      return new Response(
+        JSON.stringify({
+          error: `Apps Script error: ${(parsed as { error: string }).error}`,
+        }),
+        {
+          status: 502,
+          headers: { ...headers, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !Array.isArray((parsed as { teams?: unknown }).teams) ||
+      !Array.isArray((parsed as { newSales?: unknown }).newSales)
+    ) {
+      return new Response(
+        JSON.stringify({
+          error: "Apps Script payload missing teams[] / newSales[]",
+        }),
+        {
+          status: 502,
+          headers: { ...headers, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     return new Response(text, {
       headers: {
         ...headers,
@@ -65,7 +106,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return new Response(JSON.stringify({ error: message }), {
-      status: 500,
+      status: 502,
       headers: { ...headers, "Content-Type": "application/json" },
     });
   }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentRow, TeamRow } from "@/types/database";
 import type { AgentInput } from "@/hooks/useAgentsAdmin";
 
@@ -30,8 +30,13 @@ export function AgentDialog({
   const [busy, setBusy] = useState<"photo" | "song" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ name?: string; team?: string }>({});
+  const [previewing, setPreviewing] = useState(false);
   const photoInput = useRef<HTMLInputElement>(null);
   const songInput = useRef<HTMLInputElement>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewTimerRef = useRef<number | null>(null);
+
+  const PREVIEW_MS = 8000;
 
   useEffect(() => {
     if (!open) return;
@@ -55,8 +60,6 @@ export function AgentDialog({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
-
-  if (!open) return null;
 
   const handlePhotoFile = async (file: File) => {
     if (!name.trim()) {
@@ -92,14 +95,90 @@ export function AgentDialog({
     }
   };
 
-  const previewSong = () => {
+  /**
+   * Detiene cualquier preview en curso y libera el elemento Audio.
+   * Idempotente — seguro de llamar varias veces.
+   */
+  const stopPreview = useCallback(() => {
+    if (previewTimerRef.current !== null) {
+      window.clearTimeout(previewTimerRef.current);
+      previewTimerRef.current = null;
+    }
+    const a = previewAudioRef.current;
+    if (a) {
+      try {
+        a.pause();
+        a.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+      a.src = "";
+      a.removeAttribute("src");
+      a.load();
+      a.onended = null;
+      a.onerror = null;
+      previewAudioRef.current = null;
+    }
+    setPreviewing(false);
+  }, []);
+
+  /**
+   * Toggle: si suena, detiene; si no, arranca un preview de 8s.
+   * Reusa una sola instancia de Audio — cualquier reproducción previa se
+   * corta antes de iniciar la nueva, así nunca se solapan.
+   */
+  const togglePreview = useCallback(() => {
     if (!songUrl) return;
+    if (previewing) {
+      stopPreview();
+      return;
+    }
+    // Asegurar que no haya nada residual antes de crear el nuevo Audio.
+    stopPreview();
+
     const audio = new Audio(songUrl);
-    audio.currentTime = songStart;
+    audio.preload = "auto";
     audio.volume = 0.6;
-    audio.play().catch(() => {});
-    window.setTimeout(() => audio.pause(), 8000);
-  };
+    previewAudioRef.current = audio;
+
+    const seek = () => {
+      try {
+        audio.currentTime = songStart;
+      } catch {
+        /* ignore */
+      }
+    };
+    audio.addEventListener("loadedmetadata", seek, { once: true });
+    audio.onended = () => stopPreview();
+    audio.onerror = () => stopPreview();
+
+    setPreviewing(true);
+    audio
+      .play()
+      .then(() => {
+        // Algunos navegadores ignoran currentTime antes de play().
+        if (audio.currentTime < songStart - 0.05) seek();
+      })
+      .catch(() => stopPreview());
+
+    previewTimerRef.current = window.setTimeout(stopPreview, PREVIEW_MS);
+  }, [songUrl, songStart, previewing, stopPreview]);
+
+  // Cleanup en unmount.
+  useEffect(() => () => stopPreview(), [stopPreview]);
+
+  // Si cierran el modal, cambian de agente o cambian el archivo MP3, cortar preview.
+  useEffect(() => {
+    if (!open) stopPreview();
+  }, [open, stopPreview]);
+
+  useEffect(() => {
+    stopPreview();
+  }, [songUrl, stopPreview]);
+
+  // Early return DESPUÉS de todos los hooks para mantener el orden estable
+  // entre renders (Reglas de Hooks).
+  if (!open) return null;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -323,14 +402,18 @@ export function AgentDialog({
                   <>
                     <button
                       type="button"
-                      onClick={previewSong}
+                      onClick={togglePreview}
                       className="btn btn-secondary btn-sm"
+                      aria-pressed={previewing}
                     >
-                      ▶ Probar 8s
+                      {previewing ? "■ Detener preview" : "▶ Probar 8s"}
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSongUrl(null)}
+                      onClick={() => {
+                        stopPreview();
+                        setSongUrl(null);
+                      }}
                       className="btn btn-ghost btn-sm"
                     >
                       Quitar

@@ -32,6 +32,8 @@ function ProgressBar({ progress }: { progress: number }) {
 
 export function TeamCard({ team }: TeamCardProps) {
   const progress = Math.min(team.total / team.goal, 1);
+  const remaining = Math.max(team.goal - team.total, 0);
+  const targetReached = team.total >= team.goal;
   const sortedAgents = [...team.agents].sort((a, b) => b.total - a.total);
 
   return (
@@ -69,11 +71,24 @@ export function TeamCard({ team }: TeamCardProps) {
 
       <div className="mb-5">
         <ProgressBar progress={progress} />
-        <p className="mt-2 font-sans text-xs tracking-wider text-kriptex-cream/70 sm:text-sm">
-          {Math.round(progress * 100)}% to desk target ·{" "}
-          {sortedAgents.length} agente
-          {sortedAgents.length === 1 ? "" : "s"}
-        </p>
+        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <p className="font-sans text-xs tracking-wider text-kriptex-cream/70 sm:text-sm">
+            {Math.round(progress * 100)}% to desk target ·{" "}
+            {sortedAgents.length} agente
+            {sortedAgents.length === 1 ? "" : "s"}
+          </p>
+          {targetReached ? (
+            <p className="font-sans text-xs uppercase tracking-[0.3em] text-kriptex-orange-bright sm:text-sm">
+              Target reached
+            </p>
+          ) : (
+            <p className="font-sans text-xs tracking-wider text-kriptex-cream/70 sm:text-sm">
+              <span className="font-digital text-cyan-glow">
+                {formatCurrency(remaining)}
+              </span>
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Agent list grows with content; the dashboard's <main> handles scroll.
@@ -89,6 +104,28 @@ export function TeamCard({ team }: TeamCardProps) {
           </li>
         )}
       </ul>
+
+      <footer className="mt-5 grid grid-cols-3 gap-2 border-t border-kriptex-cyan/20 pt-3">
+        <PeriodStat label="Día" value={team.dia} />
+        <PeriodStat label="Semana" value={team.semana} />
+        <PeriodStat label="Mes" value={team.mes} />
+      </footer>
     </section>
+  );
+}
+
+function PeriodStat({ label, value }: { label: string; value: number | null }) {
+  return (
+    <div className="flex flex-col items-center text-center">
+      <span className="font-sans text-[10px] uppercase tracking-[0.3em] text-kriptex-cyan/70 sm:text-xs sm:tracking-[0.4em]">
+        {label}
+      </span>
+      <span
+        className="font-digital text-cyan-glow"
+        style={{ fontSize: "clamp(0.95rem, 1.8vw, 1.25rem)" }}
+      >
+        {value == null ? "—" : formatCurrency(value)}
+      </span>
+    </div>
   );
 }
