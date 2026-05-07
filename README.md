@@ -123,7 +123,72 @@ supabase/
 ```
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
+VITE_BRAND_NAME=
+VITE_BRAND_LOGO=
 ```
+
+## Clonar este dashboard para otro proyecto (con nueva identidad visual)
+
+Este repo ya viene preparado para **replicar la misma experiencia** y solo cambiar branding + datos.
+
+### Qué debes cambiar para una nueva marca
+
+1. **Nombre y logo** (sin tocar componentes):
+   - `VITE_BRAND_NAME`: nombre comercial del nuevo proyecto.
+   - `VITE_BRAND_LOGO`: ruta del logo en `/public` (ej: `/logos/nueva-marca.svg`).
+2. **Tagline / monograma base** en `src/config/branding.ts`:
+   - `tagline`
+   - `monogram` (1–3 letras para fallback SVG).
+3. **Assets visuales** en `public/`:
+   - logos, imágenes de fondo, favicon.
+4. **Datos / backend**:
+   - nuevo proyecto Supabase (o schema equivalente),
+   - nueva URL de Apps Script (si cambia la hoja),
+   - mismas tablas/seed/migraciones de este repo.
+
+### Prompt listo para pedirle a la IA que lo clone
+
+Copia y pega esto, rellenando los placeholders:
+
+```text
+Clona este dashboard exactamente igual en estructura, animaciones, flujos y comportamiento.
+Quiero el mismo producto base, pero para otra marca.
+
+Reglas:
+1) Mantener arquitectura y UX tal cual (rutas, hooks, componentes, lógica de jackpot, admin/login, integración Supabase y proxy de Google Sheets).
+2) Cambiar solo identidad visual y textos de marca.
+3) No romper contratos de datos ni nombres de campos.
+4) Entregar cambios aplicados directamente en el código + README actualizado del nuevo proyecto.
+
+Nueva identidad:
+- BRAND_NAME: <NOMBRE_NUEVO>
+- BRAND_LOGO_PUBLIC_PATH: </logos/nuevo-logo.svg>
+- TAGLINE: <TAGLINE_NUEVO>
+- MONOGRAM: <1-3 letras>
+- Paleta/estilo visual: <describir estilo>
+
+Backend nuevo:
+- VITE_SUPABASE_URL: <URL>
+- VITE_SUPABASE_ANON_KEY: <KEY>
+- APPS_SCRIPT_URL: <URL_APPS_SCRIPT>
+
+Tareas exactas:
+- Configurar branding en variables de entorno y `src/config/branding.ts`.
+- Reemplazar assets visuales en `public/`.
+- Validar que `/`, `/admin/login` y `/admin` funcionen.
+- Validar que la animación jackpot siga disparando igual.
+- Dejar instrucciones de setup/deploy en README del nuevo repo.
+```
+
+### Checklist de verificación post-clonado
+
+- [ ] El nombre de marca se refleja en login, headers y título del navegador.
+- [ ] El logo nuevo carga correctamente (si falla, aparece fallback con monograma).
+- [ ] El dashboard público funciona con datos reales (o mock fallback).
+- [ ] El flujo de jackpot conserva animación, audio y cola serial.
+- [ ] Admin login funciona con Supabase Auth.
+- [ ] Build y deploy (`npm run build`) sin errores.
+- [ ] README del nuevo repo documenta env vars y pasos de despliegue.
 
 ## Próximos pasos (Fase 3 — Admin)
 
